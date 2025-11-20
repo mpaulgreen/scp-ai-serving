@@ -1,0 +1,16 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: facebook-opt-125m-simulated
+  namespace: llm
+spec:
+  port:
+    targetPort: https
+  tls:
+    termination: passthrough
+    insecureEdgeTerminationPolicy: Redirect
+  to:
+    kind: Service
+    name: facebook-opt-125m-simulated-kserve-workload-svc
+    weight: 100
+  wildcardPolicy: None
