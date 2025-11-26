@@ -1,2 +1,4 @@
 *.pem
 maas/cleanup.md
+cleanup.md
+.idea/
