@@ -53,3 +53,14 @@ OAuth 2.0 / OpenID Connect authentication integration for MaaS platform using Ke
 - **MaaS platform with OAuth integration**
 - Authorino for JWT validation
 - Limitador for rate limiting
+
+---
+
+### BYOM Samples
+Bring Your Own Model (BYOM) deployment guides for packaging AI models as ModelCar images and deploying them with LLMInferenceService on OpenShift AI.
+
+📖 **Guide:** [modelcar/README.md](./modelcar/README.md)
+
+**Features:**
+- ModelCar (OCI container) packaging for AI models
+- Deployment guides for small (≤3B) and large (≥8B) models
