@@ -11,6 +11,7 @@
 - Node Feature Discovery 4.19.0-202510211212
 - NVIDIA GPU Operator 25.10.0
 - Red Hat OpenShift Serverless 1.36.1
+- Authorino 1.2.3
 - Red Hat OpenShift Service Mesh 2
 - Red Hat OpenShift AI 2.25
 - DataScienceCluster with KServe
