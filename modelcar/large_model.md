@@ -539,12 +539,12 @@ spec:
     containers:
       - name: main
         # Red Hat ModelCar-compatible vLLM Runtime
-        image: "registry.redhat.io/rhoai/odh-vllm-cuda-rhel9:v2.25.0-1759340926"
+        image: "docker.io/vllm/vllm-openai:v0.6.6.post1"
         imagePullPolicy: IfNotPresent
 
         # vLLM server command
         command:
-          - python
+          - python3
           - -m
           - vllm.entrypoints.openai.api_server
         args:
