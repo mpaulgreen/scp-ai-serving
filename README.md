@@ -64,3 +64,29 @@ Bring Your Own Model (BYOM) deployment guides for packaging AI models as ModelCa
 **Features:**
 - ModelCar (OCI container) packaging for AI models
 - Deployment guides for small (≤3B) and large (≥8B) models
+
+---
+
+### OAuth Authentication with IBM Verify
+Single-tenant MaaS platform deployment with OAuth 2.0 / OpenID Connect authentication using IBM Security Verify as the identity provider.
+
+📖 **Guide:** [verify_oauth/README.md](./verify_oauth/README.md)
+
+**Features:**
+- OAuth 2.0 / OIDC authentication with IBM Security Verify
+- JWT token validation via Authorino
+- Tier-based rate limiting (free, premium, enterprise)
+- Request-based rate limiting (5/20/50 req per 2 min)
+- Token consumption-based rate limiting
+- Single-tenant gateway with tier-based access control
+
+**Components:**
+- IBM Security Verify SaaS identity provider
+- Kuadrant (Authorino + Limitador)
+- MaaS API with tier-to-group mapping
+- Gateway API with authentication and rate limit policies
+
+**Use Case:**
+- External SaaS identity provider integration
+- Tier-based user access control
+- Production-ready OAuth authentication flow
