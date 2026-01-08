@@ -212,7 +212,7 @@ spec:
         runAsNonRoot: true
       containers:
       - name: maas-api
-        image: quay.io/opendatahub/maas-api:latest
+        image: quay.io/opendatahub/maas-api:77716126abd261a7f8a7ca2e040e3307c998ca4d
         imagePullPolicy: Always
         ports:
         - name: http

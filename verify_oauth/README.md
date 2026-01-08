@@ -122,7 +122,7 @@ oc get httproute -n llm | grep granite
 
 ```bash
 # Set IBM Verify credentials (same as deployment)
-export IBM_VERIFY_TENANT="test-maas"
+export IBM_VERIFY_TENANT="maas"
 export CLIENT_ID=""
 export CLIENT_SECRET=""
 
@@ -133,7 +133,7 @@ export ACCESS_TOKEN=$(curl -sk -X POST \
   -d "client_id=${CLIENT_ID}" \
   -d "client_secret=${CLIENT_SECRET}" \
   -d "username=testuser" \
-  -d "password=password123" \
+  -d "password=password" \
   -d "grant_type=password" \
   -d "scope=openid profile email" | jq -r '.access_token')
 
