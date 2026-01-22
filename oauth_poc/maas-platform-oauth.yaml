@@ -1,0 +1,490 @@
+# MaaS Platform Components with OAuth 2.0 Authentication (Keycloak)
+#
+# IMPORTANT: Set the following environment variables before applying:
+# export CLUSTER_DOMAIN=$(oc get ingresses.config.openshift.io cluster -o jsonpath='{.spec.domain}')
+# export KEYCLOAK_ISSUER="https://$(oc get route keycloak -n rhsso -o jsonpath='{.spec.host}')/auth/realms/maas"
+#
+# Apply with:
+# cat maas-platform-oauth.yaml | envsubst | oc apply -f -
+#
+# Prerequisites:
+# - Keycloak/Red Hat SSO operator installed
+# - Keycloak instance running in rhsso namespace
+# - maas realm and maas-client configured in Keycloak
+
+---
+# Namespace for Kuadrant
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kuadrant-system
+
+---
+# Kuadrant CR - Creates Authorino and Limitador instances
+apiVersion: kuadrant.io/v1beta1
+kind: Kuadrant
+metadata:
+  name: kuadrant
+  namespace: kuadrant-system
+spec: {}
+
+---
+# OpenShift AI Inference Gateway (Required by RHOAI base configurations)
+# NOTE: This gateway is referenced by LLMInferenceService preset configurations
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: openshift-ai-inference
+  namespace: openshift-ingress
+spec:
+  gatewayClassName: data-science-gateway-class
+  listeners:
+  - name: http
+    port: 80
+    protocol: HTTP
+    allowedRoutes:
+      namespaces:
+        from: All
+
+---
+# Namespace for MaaS API
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: maas-api
+
+---
+# ServiceAccount for MaaS API
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: maas-api
+  namespace: maas-api
+  labels:
+    app.kubernetes.io/name: maas-api
+    app.kubernetes.io/component: api
+    app.kubernetes.io/part-of: model-as-a-service
+
+---
+# ClusterRole for MaaS API
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: maas-api
+  labels:
+    app.kubernetes.io/name: maas-api
+    app.kubernetes.io/component: api
+    app.kubernetes.io/part-of: model-as-a-service
+rules:
+- apiGroups: [""]
+  resources: [configmaps]
+  verbs: [get, list, create, update, patch, delete]
+- apiGroups: [""]
+  resources: [namespaces]
+  verbs: [get, list, watch, create, update, patch, delete]
+- apiGroups: [""]
+  resources: [serviceaccounts]
+  verbs: [get, list, watch, create, update, patch, delete]
+- apiGroups: [""]
+  resources: [serviceaccounts/token]
+  verbs: [create]
+- apiGroups: [authentication.k8s.io]
+  resources: [tokenreviews]
+  verbs: [create]
+- apiGroups: [serving.kserve.io]
+  resources: [inferenceservices, llminferenceservices]
+  verbs: [get, list, watch]
+- apiGroups: [""]
+  resources: [pods, services, endpoints]
+  verbs: [get, list, watch]
+
+---
+# ClusterRoleBinding for MaaS API
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: maas-api
+  labels:
+    app.kubernetes.io/name: maas-api
+    app.kubernetes.io/component: api
+    app.kubernetes.io/part-of: model-as-a-service
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: maas-api
+subjects:
+- kind: ServiceAccount
+  name: maas-api
+  namespace: maas-api
+
+---
+# Tier Configuration ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tier-to-group-mapping
+  namespace: maas-api
+  labels:
+    app: maas-api
+    app.kubernetes.io/name: maas-api
+    app.kubernetes.io/component: api
+    app.kubernetes.io/part-of: model-as-a-service
+    component: tier-mapping
+data:
+  tiers: |
+    # Free tier - default for all authenticated users
+    - name: free
+      level: 0
+      groups:
+        - tier-free-users
+        - system:authenticated  # Default for all authenticated users
+
+    # Premium tier - for premium users
+    - name: premium
+      level: 1
+      groups:
+        - tier-premium-users
+        - premium-group
+
+    # Enterprise tier - highest level
+    - name: enterprise
+      level: 2
+      groups:
+        - tier-enterprise-users
+        - enterprise-group
+        - admin-group
+
+---
+# MaaS API Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: maas-api
+  namespace: maas-api
+  labels:
+    app.kubernetes.io/name: maas-api
+    app.kubernetes.io/component: api
+    app.kubernetes.io/part-of: model-as-a-service
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 8080
+    targetPort: http
+    protocol: TCP
+  selector:
+    app.kubernetes.io/name: maas-api
+    app.kubernetes.io/component: api
+    app.kubernetes.io/part-of: model-as-a-service
+
+---
+# MaaS API Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: maas-api
+  namespace: maas-api
+  labels:
+    app.kubernetes.io/name: maas-api
+    app.kubernetes.io/component: api
+    app.kubernetes.io/part-of: model-as-a-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: maas-api
+      app.kubernetes.io/component: api
+      app.kubernetes.io/part-of: model-as-a-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: maas-api
+        app.kubernetes.io/component: api
+        app.kubernetes.io/part-of: model-as-a-service
+    spec:
+      serviceAccountName: maas-api
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+      containers:
+      - name: maas-api
+        image: quay.io/opendatahub/maas-api:latest
+        imagePullPolicy: Always
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        env:
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: PROVIDER
+          value: sa-tokens
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+        securityContext:
+          runAsNonRoot: true
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+
+---
+# MaaS Default Gateway
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: maas-default-gateway
+  namespace: openshift-ingress
+  labels:
+    app.kubernetes.io/name: maas
+    app.kubernetes.io/component: gateway
+    app.kubernetes.io/instance: maas-default-gateway
+    opendatahub.io/managed: "false"
+  annotations:
+    opendatahub.io/managed: "false"
+spec:
+  gatewayClassName: data-science-gateway-class
+  listeners:
+  - name: http
+    port: 80
+    protocol: HTTP
+    hostname: "maas.${CLUSTER_DOMAIN}"
+    allowedRoutes:
+      namespaces:
+        from: All
+  - name: https
+    port: 443
+    protocol: HTTPS
+    hostname: "maas.${CLUSTER_DOMAIN}"
+    allowedRoutes:
+      namespaces:
+        from: All
+    tls:
+      mode: Terminate
+      certificateRefs:
+      - kind: Secret
+        group: ""
+        name: default-gateway-tls
+
+---
+# HTTPRoute for MaaS API
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: maas-api-route
+  namespace: maas-api
+  labels:
+    app.kubernetes.io/name: maas-api
+    app.kubernetes.io/component: api
+    app.kubernetes.io/part-of: model-as-a-service
+spec:
+  parentRefs:
+  - name: maas-default-gateway
+    namespace: openshift-ingress
+  rules:
+  # Route 1: /v1/models path
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /v1/models
+    backendRefs:
+    - name: maas-api
+      port: 8080
+      weight: 100
+  # Route 2: /maas-api path with rewrite
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /maas-api
+    filters:
+    - type: URLRewrite
+      urlRewrite:
+        path:
+          type: ReplacePrefixMatch
+          replacePrefixMatch: /
+    backendRefs:
+    - name: maas-api
+      port: 8080
+      weight: 100
+
+---
+# AuthPolicy for MaaS API HTTPRoute (OAuth 2.0 / JWT)
+apiVersion: kuadrant.io/v1
+kind: AuthPolicy
+metadata:
+  name: maas-api-auth-policy
+  namespace: maas-api
+  labels:
+    app.kubernetes.io/name: maas-api
+    app.kubernetes.io/component: api
+    app.kubernetes.io/part-of: model-as-a-service
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: maas-api-route
+  rules:
+    authentication:
+      keycloak-jwt:
+        jwt:
+          issuerUrl: ${KEYCLOAK_ISSUER}
+          ttl: 300
+          insecureSkipVerify: true
+        defaults:
+          userid:
+            expression: auth.identity.sub
+
+---
+# AuthPolicy for Gateway (Model Inference) - OAuth 2.0 / JWT
+apiVersion: kuadrant.io/v1
+kind: AuthPolicy
+metadata:
+  name: gateway-auth-policy
+  namespace: openshift-ingress
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: maas-default-gateway
+  rules:
+    authentication:
+      keycloak-jwt:
+        jwt:
+          issuerUrl: ${KEYCLOAK_ISSUER}
+          ttl: 300
+          insecureSkipVerify: true
+        defaults:
+          userid:
+            expression: auth.identity.sub
+          username:
+            expression: auth.identity.preferred_username
+          groups:
+            expression: auth.identity.groups
+    metadata:
+      matchedTier:
+        http:
+          url: http://maas-api.maas-api.svc.cluster.local:8080/v1/tiers/lookup
+          method: POST
+          contentType: application/json
+          body:
+            expression: '{ "groups": auth.identity.groups }'
+        cache:
+          key:
+            selector: auth.identity.sub
+          ttl: 300
+    response:
+      success:
+        filters:
+          identity:
+            json:
+              properties:
+                tier:
+                  expression: auth.metadata.matchedTier["tier"]
+                userid:
+                  expression: auth.identity.userid
+
+---
+# RateLimitPolicy for Gateway
+apiVersion: kuadrant.io/v1
+kind: RateLimitPolicy
+metadata:
+  name: gateway-rate-limits
+  namespace: openshift-ingress
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: maas-default-gateway
+  limits:
+    free:
+      rates:
+      - limit: 5
+        window: 2m
+      counters:
+      - expression: auth.identity.userid
+      when:
+      - predicate: |
+          auth.identity.tier == "free"
+    premium:
+      rates:
+      - limit: 20
+        window: 2m
+      counters:
+      - expression: auth.identity.userid
+      when:
+      - predicate: |
+          auth.identity.tier == "premium"
+    enterprise:
+      rates:
+      - limit: 50
+        window: 2m
+      counters:
+      - expression: auth.identity.userid
+      when:
+      - predicate: |
+          auth.identity.tier == "enterprise"
+
+---
+# TokenRateLimitPolicy for Gateway
+apiVersion: kuadrant.io/v1alpha1
+kind: TokenRateLimitPolicy
+metadata:
+  name: gateway-token-rate-limits
+  namespace: openshift-ingress
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: maas-default-gateway
+  limits:
+    free-user-tokens:
+      rates:
+      - limit: 100
+        window: 1m
+      counters:
+      - expression: auth.identity.userid
+      when:
+      - predicate: |
+          auth.identity.tier == "free"
+    premium-user-tokens:
+      rates:
+      - limit: 50000
+        window: 1m
+      counters:
+      - expression: auth.identity.userid
+      when:
+      - predicate: |
+          auth.identity.tier == "premium"
+    enterprise-user-tokens:
+      rates:
+      - limit: 100000
+        window: 1m
+      counters:
+      - expression: auth.identity.userid
+      when:
+      - predicate: |
+          auth.identity.tier == "enterprise"

@@ -1,0 +1,101 @@
+---
+apiVersion: keycloak.org/v1alpha1
+kind: KeycloakClient
+metadata:
+  name: maas-client
+  namespace: rhsso
+  labels:
+    app: sso
+spec:
+  realmSelector:
+    matchLabels:
+      app: sso
+  client:
+    clientId: maas-client
+    name: "MaaS Platform Client"
+    description: "OAuth 2.0 client for MaaS platform API access"
+    enabled: true
+    clientAuthenticatorType: client-secret
+    secret: "changeme-generate-strong-secret"  # This will be stored in a Secret
+
+    # Protocol and access settings
+    protocol: openid-connect
+    publicClient: false
+    standardFlowEnabled: true  # Authorization Code Flow
+    implicitFlowEnabled: false  # Implicit flow (not recommended)
+    directAccessGrantsEnabled: true  # Resource Owner Password Credentials (for testing)
+    serviceAccountsEnabled: true  # Client Credentials Flow
+
+    # URLs - update these for your environment
+    rootUrl: ""
+    baseUrl: ""
+    redirectUris:
+      - "https://*"  # Allow all HTTPS redirects (restrict in production)
+      - "http://localhost:*"  # For local testing
+    webOrigins:
+      - "https://*"  # CORS - allow all HTTPS origins (restrict in production)
+      - "http://localhost:*"
+
+    # Token settings (inherits from realm if not specified)
+    # Uncomment to override realm settings
+    # attributes:
+    #   access.token.lifespan: "300"  # 5 minutes
+    #   client.session.idle.timeout: "1800"  # 30 minutes
+    #   client.session.max.lifespan: "36000"  # 10 hours
+
+    # Default client scopes
+    defaultClientScopes:
+      - openid
+      - email
+      - profile
+      - roles
+      - web-origins
+      - groups
+
+    # Optional client scopes
+    optionalClientScopes:
+      - address
+      - phone
+      - offline_access
+
+    # Protocol mappers - add user attributes to token claims
+    protocolMappers:
+      - name: username
+        protocol: openid-connect
+        protocolMapper: oidc-usermodel-property-mapper
+        config:
+          user.attribute: username
+          claim.name: preferred_username
+          jsonType.label: String
+          id.token.claim: "true"
+          access.token.claim: "true"
+          userinfo.token.claim: "true"
+
+      - name: email
+        protocol: openid-connect
+        protocolMapper: oidc-usermodel-property-mapper
+        config:
+          user.attribute: email
+          claim.name: email
+          jsonType.label: String
+          id.token.claim: "true"
+          access.token.claim: "true"
+          userinfo.token.claim: "true"
+
+      - name: groups
+        protocol: openid-connect
+        protocolMapper: oidc-group-membership-mapper
+        config:
+          claim.name: groups
+          full.path: "false"
+          id.token.claim: "true"
+          access.token.claim: "true"
+          userinfo.token.claim: "true"
+
+      - name: audience
+        protocol: openid-connect
+        protocolMapper: oidc-audience-mapper
+        config:
+          included.client.audience: maas-client
+          id.token.claim: "false"
+          access.token.claim: "true"

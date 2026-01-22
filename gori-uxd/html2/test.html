@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Test API - ModelCar Platform</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .test-container {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--spacing-lg);
+    }
+    .response-area {
+      background: var(--color-gray-50);
+      border: 1px solid var(--color-gray-200);
+      border-radius: 6px;
+      padding: var(--spacing-md);
+      min-height: 200px;
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <a href="index.html" class="logo">ModelCar Platform</a>
+  </header>
+
+  <nav class="nav">
+    <ul class="nav-tabs">
+      <li><a href="index.html" class="nav-tab">Dashboard</a></li>
+      <li><a href="catalog.html" class="nav-tab">Catalog</a></li>
+      <li><a href="deploy.html" class="nav-tab">Deploy</a></li>
+      <li><a href="test.html" class="nav-tab active">Test</a></li>
+    </ul>
+  </nav>
+
+  <main class="main">
+    <h1>Test Model API</h1>
+
+    <div class="card mb-lg">
+      <div class="form-group">
+        <label class="form-label">Select Deployment</label>
+        <select class="form-select" id="modelSelect">
+          <option>granite-prod-01</option>
+          <option>qwen-dev</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="test-container">
+      <!-- Request Panel -->
+      <div class="card">
+        <h2>Request</h2>
+
+        <div class="form-group">
+          <label class="form-label">System Prompt</label>
+          <textarea class="form-textarea" rows="3" id="systemPrompt">You are a helpful assistant.</textarea>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">User Message</label>
+          <textarea class="form-textarea" rows="6" id="userMessage">What is OpenShift?</textarea>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Max Tokens</label>
+          <input type="number" class="form-input" id="maxTokens" value="200" min="1" max="2000">
+        </div>
+
+        <button class="btn btn-primary" onclick="sendRequest()">Send Request</button>
+      </div>
+
+      <!-- Response Panel -->
+      <div class="card">
+        <h2>Response</h2>
+        <div class="response-area" id="responseArea">Click "Send Request" to test the model...</div>
+      </div>
+    </div>
+
+    <!-- cURL Example -->
+    <div class="card">
+      <h2>cURL Example</h2>
+      <div class="response-area" style="background: var(--color-gray-900); color: #10B981;">curl -k https://maas.apps.cluster.com/llm/granite-prod-01/v1/chat/completions \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "granite-3.1-8b-instruct",
+    "messages": [
+      {"role": "system", "content": "You are a helpful assistant."},
+      {"role": "user", "content": "What is OpenShift?"}
+    ],
+    "max_tokens": 200
+  }'</div>
+    </div>
+  </main>
+
+  <script>
+    function sendRequest() {
+      const responseArea = document.getElementById('responseArea');
+      responseArea.textContent = 'Sending request...';
+
+      // Simulate API call
+      setTimeout(() => {
+        responseArea.textContent = `{
+  "id": "chatcmpl-123",
+  "object": "chat.completion",
+  "created": ${Math.floor(Date.now() / 1000)},
+  "model": "granite-3.1-8b-instruct",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "OpenShift is Red Hat's enterprise Kubernetes platform that provides a comprehensive solution for building, deploying, and managing containerized applications. It adds developer and operational tools on top of Kubernetes, making it easier to use in production environments."
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 25,
+    "completion_tokens": 48,
+    "total_tokens": 73
+  }
+}`;
+      }, 1000);
+    }
+  </script>
+</body>
+</html>

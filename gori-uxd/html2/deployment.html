@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Deployment Details - ModelCar Platform</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="header">
+    <a href="index.html" class="logo">ModelCar Platform</a>
+  </header>
+
+  <nav class="nav">
+    <ul class="nav-tabs">
+      <li><a href="index.html" class="nav-tab">Dashboard</a></li>
+      <li><a href="catalog.html" class="nav-tab">Catalog</a></li>
+      <li><a href="deploy.html" class="nav-tab">Deploy</a></li>
+      <li><a href="test.html" class="nav-tab">Test</a></li>
+    </ul>
+  </nav>
+
+  <main class="main">
+    <div class="d-flex justify-between align-center mb-lg">
+      <div>
+        <h1>granite-prod-01</h1>
+        <p class="text-muted">LLMInferenceService in namespace: llm</p>
+      </div>
+      <span class="badge badge-running">Running</span>
+    </div>
+
+    <!-- Basic Info -->
+    <div class="card">
+      <h2>Configuration</h2>
+      <table>
+        <tr>
+          <td style="padding: var(--spacing-sm) 0; font-weight: 500;">Model Name:</td>
+          <td style="padding: var(--spacing-sm) 0;">granite-3.1-8b-instruct</td>
+        </tr>
+        <tr>
+          <td style="padding: var(--spacing-sm) 0; font-weight: 500;">Image URI:</td>
+          <td style="padding: var(--spacing-sm) 0;">quay.io/user/granite-3.1-8b-instruct:v1</td>
+        </tr>
+        <tr>
+          <td style="padding: var(--spacing-sm) 0; font-weight: 500;">Replicas:</td>
+          <td style="padding: var(--spacing-sm) 0;">2</td>
+        </tr>
+        <tr>
+          <td style="padding: var(--spacing-sm) 0; font-weight: 500;">Gateway:</td>
+          <td style="padding: var(--spacing-sm) 0;">maas-default-gateway</td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- Pod Status -->
+    <div class="card">
+      <h2>Pods</h2>
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Pod Name</th>
+            <th>Status</th>
+            <th>Restarts</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>granite-prod-01-0</td>
+            <td><span class="badge badge-running">Running</span></td>
+            <td>0</td>
+          </tr>
+          <tr>
+            <td>granite-prod-01-1</td>
+            <td><span class="badge badge-running">Running</span></td>
+            <td>0</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Actions -->
+    <div class="card">
+      <h2>Actions</h2>
+      <div style="display: flex; gap: var(--spacing-sm);">
+        <button class="btn btn-primary" onclick="openScaleModal()">Scale</button>
+        <a href="test.html" class="btn">Test API</a>
+        <button class="btn btn-danger" onclick="confirmDelete()">Delete</button>
+      </div>
+    </div>
+  </main>
+
+  <!-- Scale Modal -->
+  <div id="scaleModal" class="modal-overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title">Scale Deployment</h3>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Number of Replicas</label>
+          <input type="number" class="form-input" id="replicaCount" min="0" max="10" value="2">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" onclick="closeScaleModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="scaleDeployment()">Scale</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function openScaleModal() {
+      document.getElementById('scaleModal').style.display = 'flex';
+    }
+
+    function closeScaleModal() {
+      document.getElementById('scaleModal').style.display = 'none';
+    }
+
+    function scaleDeployment() {
+      const replicas = document.getElementById('replicaCount').value;
+      alert('Scaled to ' + replicas + ' replicas');
+      closeScaleModal();
+      location.reload();
+    }
+
+    function confirmDelete() {
+      if (confirm('Are you sure you want to delete this deployment?')) {
+        alert('Deployment deleted');
+        window.location.href = 'index.html';
+      }
+    }
+  </script>
+</body>
+</html>

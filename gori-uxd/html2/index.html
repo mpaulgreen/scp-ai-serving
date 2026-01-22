@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ModelCar Platform</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="header">
+    <a href="index.html" class="logo">ModelCar Platform</a>
+  </header>
+
+  <nav class="nav">
+    <ul class="nav-tabs">
+      <li><a href="index.html" class="nav-tab active">Dashboard</a></li>
+      <li><a href="catalog.html" class="nav-tab">Catalog</a></li>
+      <li><a href="deploy.html" class="nav-tab">Deploy</a></li>
+      <li><a href="test.html" class="nav-tab">Test</a></li>
+    </ul>
+  </nav>
+
+  <main class="main">
+    <div class="d-flex justify-between align-center mb-lg">
+      <h1>My Deployments</h1>
+      <a href="deploy.html" class="btn btn-primary">Deploy Model</a>
+    </div>
+
+    <div class="card">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Model</th>
+            <th>Status</th>
+            <th>Replicas</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><a href="deployment.html">granite-prod-01</a></td>
+            <td>granite-3.1-8b-instruct</td>
+            <td><span class="badge badge-running">Running</span></td>
+            <td>2/2</td>
+            <td>
+              <a href="deployment.html" class="btn btn-sm">View</a>
+              <button class="btn btn-sm" onclick="openScaleModal('granite-prod-01', 2)">Scale</button>
+              <button class="btn btn-danger btn-sm">Delete</button>
+            </td>
+          </tr>
+          <tr>
+            <td><a href="deployment.html">qwen-dev</a></td>
+            <td>qwen-2.5-3b-instruct</td>
+            <td><span class="badge badge-running">Running</span></td>
+            <td>1/1</td>
+            <td>
+              <a href="deployment.html" class="btn btn-sm">View</a>
+              <button class="btn btn-sm" onclick="openScaleModal('qwen-dev', 1)">Scale</button>
+              <button class="btn btn-danger btn-sm">Delete</button>
+            </td>
+          </tr>
+          <tr>
+            <td><a href="deployment.html">llama-staging</a></td>
+            <td>llama-3.1-8b</td>
+            <td><span class="badge badge-pending">Pending</span></td>
+            <td>0/1</td>
+            <td>
+              <a href="deployment.html" class="btn btn-sm">View</a>
+              <button class="btn btn-sm" disabled>Scale</button>
+              <button class="btn btn-danger btn-sm">Delete</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </main>
+
+  <!-- Scale Modal -->
+  <div id="scaleModal" class="modal-overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title">Scale Deployment</h3>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Deployment: <span id="modalDeploymentName"></span></label>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Number of Replicas</label>
+          <input type="number" class="form-input" id="replicaCount" min="0" max="10" value="1">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" onclick="closeScaleModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="scaleDeployment()">Scale</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function openScaleModal(name, currentReplicas) {
+      document.getElementById('modalDeploymentName').textContent = name;
+      document.getElementById('replicaCount').value = currentReplicas;
+      document.getElementById('scaleModal').style.display = 'flex';
+    }
+
+    function closeScaleModal() {
+      document.getElementById('scaleModal').style.display = 'none';
+    }
+
+    function scaleDeployment() {
+      const replicas = document.getElementById('replicaCount').value;
+      alert('Scaled to ' + replicas + ' replicas');
+      closeScaleModal();
+    }
+  </script>
+</body>
+</html>

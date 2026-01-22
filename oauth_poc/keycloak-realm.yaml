@@ -1,0 +1,71 @@
+---
+apiVersion: keycloak.org/v1alpha1
+kind: KeycloakRealm
+metadata:
+  name: maas-realm
+  namespace: rhsso
+  labels:
+    app: sso
+spec:
+  realm:
+    id: maas
+    realm: maas
+    displayName: "MaaS Platform"
+    enabled: true
+    sslRequired: "external"
+    registrationAllowed: false
+    resetPasswordAllowed: true
+    editUsernameAllowed: false
+    bruteForceProtected: true
+
+    # Token settings
+    accessTokenLifespan: 300  # 5 minutes
+    accessTokenLifespanForImplicitFlow: 900  # 15 minutes
+    ssoSessionIdleTimeout: 1800  # 30 minutes
+    ssoSessionMaxLifespan: 36000  # 10 hours
+    offlineSessionIdleTimeout: 2592000  # 30 days
+
+    # Required actions
+    requiredActions:
+      - alias: "UPDATE_PASSWORD"
+        name: "Update Password"
+        enabled: true
+        defaultAction: false
+
+    # User federation - can be configured later to sync with LDAP/AD
+    # userFederationProviders: []
+
+    # Identity providers - can be configured to integrate with external IdPs
+    # identityProviders: []
+
+    # Client scopes
+    clientScopes:
+      - name: groups
+        description: "User groups scope"
+        protocol: openid-connect
+        attributes:
+          include.in.token.scope: "true"
+          display.on.consent.screen: "true"
+        protocolMappers:
+          - name: groups
+            protocol: openid-connect
+            protocolMapper: oidc-group-membership-mapper
+            config:
+              claim.name: groups
+              full.path: "false"
+              id.token.claim: "true"
+              access.token.claim: "true"
+              userinfo.token.claim: "true"
+
+    # Default client scopes
+    defaultDefaultClientScopes:
+      - openid
+      - email
+      - profile
+      - roles
+      - web-origins
+      - groups
+
+  instanceSelector:
+    matchLabels:
+      app: sso

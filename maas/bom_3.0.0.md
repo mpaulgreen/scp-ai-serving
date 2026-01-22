@@ -1,4 +1,4 @@
-# OpenShift AI Model Serving Deployment Guide
+# OpenShift AI 3 Model Serving Deployment Guide
 ## KServe with GPU Support for LLM Inference
 
 **Prerequisites:**
@@ -7,20 +7,43 @@
 **Tested on**
 - Openshift AI Self Managed on AWS
 
-**Target Configuration:**
-- Node Feature Discovery 4.19.0-202510211212
-- NVIDIA GPU Operator 25.10.0
-- Red Hat OpenShift Serverless 1.36.1
-- Authorino 1.2.3
-- Red Hat OpenShift Service Mesh 2
-- Red Hat OpenShift AI 2.25
-- DataScienceCluster with KServe
+## Target Configuration:
 
-**Refer:**
-- [Red Hat OpenShift AI 2.25 - Installing and Uninstalling in a Disconnected Environment](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/2.25/html-single/installing_and_uninstalling_openshift_ai_self-managed_in_a_disconnected_environment/index)
-- [RHOAI Disconnected Install Helper - RHOAI 2.25](https://github.com/red-hat-data-services/rhoai-disconnected-install-helper/blob/main/rhoai-2.25.md)
+**GPU Support:**
+- Node Feature Discovery (NFD) Operator 4.19.0-202510211212
+- NVIDIA GPU Operator 25.10.0
+
+**Platform Operators:**
+- Red Hat OpenShift AI (RHOAI) 3.0.0
+- Red Hat OpenShift Service Mesh 3.x (auto-installed with RHOAI)
+- cert-manager for Red Hat OpenShift 1.18.0
+- Leader Worker Set Operator 1.0.0
+- Red Hat Connectivity Link (RHCL) 1.2.0
+  - Authorino Operator 1.2.4
+  - Limitador Operator 1.2.0
+  - DNS Operator 1.2.0
+
+**Model Serving:**
+- DataScienceCluster with KServe enabled
+- Service Mesh 3 Istio Gateway
+
+----
+**MaaS Platform:**
+- MaaS API with token-based authentication
+- Kuadrant CR (Authorino and Limitador instances)
+- Gateway API resources (Gateways, HTTPRoutes, Policies)
+
+**Prerequisites:**
+- OpenShift 4.19+ cluster with cluster-admin access
+- `oc`, `kubectl`, `jq`, `kustomize` v5.7.0+ installed
+- Sufficient cluster resources (CPU, memory, storage)
+
+**Refer**
+- [Red Hat OpenShift AI 3.0.0 - Installing and Uninstalling in a Disconnected Environment](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.0/html-single/installing_and_uninstalling_openshift_ai_self-managed_in_a_disconnected_environment/index)
+- [Maas Billing](https://github.com/opendatahub-io/maas-billing/tree/main/deployment)
 
 ---
+
 ## Phase 1: GPU Prerequisites (Node Feature Discovery & NVIDIA GPU Operator)
 
 **IMPORTANT:** GPU support must be configured BEFORE installing model serving components.
@@ -69,6 +92,7 @@ oc get csv -n openshift-nfd
 
 
 ### 1.2 Create NodeFeatureDiscovery Instance
+
 ```bash
 # Create NodeFeatureDiscovery instance
 cat <<EOF | oc apply -f -
@@ -208,6 +232,7 @@ oc get pods -n openshift-nfd
 oc get nodes -l feature.node.kubernetes.io/pci-10de.present=true
 ```
 
+
 ### 1.3 Install NVIDIA GPU Operator
 
 ```bash
@@ -248,6 +273,8 @@ oc wait --for=jsonpath='{.status.state}'=AtLatestKnown subscription/gpu-operator
 # Verify CSV
 oc get csv -n nvidia-gpu-operator
 ```
+
+
 ### 1.4 Create ClusterPolicy Instance
 
 ```bash
@@ -351,6 +378,7 @@ oc wait --for=condition=ready clusterpolicy/gpu-cluster-policy --timeout=600s
 oc get pods -n nvidia-gpu-operator
 ```
 
+
 ### 1.5 Verify GPU Access
 
 ```bash
@@ -359,24 +387,30 @@ oc get nodes -l nvidia.com/gpu.present=true -o custom-columns=NAME:.metadata.nam
 ```
 
 ---
+
 ## Phase 2: Platform Operator Installation
 
-**IMPORTANT:** Install operators first, then create DataScienceCluster which will automatically create KnativeServing and ServiceMeshControlPlane.
+### 2.1 Install cert-manager for Red Hat OpenShift [SKIP THIS IF ALREADY INSTALLED]
 
-### 2.1 Install Red Hat OpenShift Serverless 1.36.1
+cert-manager is required for managing TLS certificates for the MaaS platform and model serving.
 
 ```bash
-# Create namespace 
-oc create namespace openshift-serverless --dry-run=client -o yaml | oc apply -f -
+# Create namespace for cert-manager
+oc create namespace cert-manager-operator --dry-run=client -o yaml | oc apply -f -
 
-# Create OperatorGroup 
+# Clean up any existing OperatorGroups (only one allowed per namespace)
+oc delete operatorgroup --all -n cert-manager-operator --ignore-not-found=true
+
+# Create OperatorGroup
 cat <<EOF | oc apply -f -
 apiVersion: operators.coreos.com/v1
 kind: OperatorGroup
 metadata:
-  name: serverless-operators
-  namespace: openshift-serverless
-spec: {}
+  name: cert-manager-operator
+  namespace: cert-manager-operator
+spec:
+  targetNamespaces:
+  - cert-manager-operator
 EOF
 
 # Create Subscription
@@ -384,65 +418,134 @@ cat <<EOF | oc apply -f -
 apiVersion: operators.coreos.com/v1alpha1
 kind: Subscription
 metadata:
-  name: serverless-operator
-  namespace: openshift-serverless
+  name: openshift-cert-manager-operator
+  namespace: cert-manager-operator
 spec:
-  channel: stable
-  name: serverless-operator
+  channel: stable-v1.18
+  installPlanApproval: Automatic
+  name: openshift-cert-manager-operator
   source: redhat-operators
   sourceNamespace: openshift-marketplace
-  installPlanApproval: Automatic
 EOF
 
 # Wait for operator to be ready
 sleep 15
-oc wait --for=jsonpath='{.status.state}'=AtLatestKnown subscription/serverless-operator -n openshift-serverless --timeout=300s
+oc wait --for=jsonpath='{.status.state}'=AtLatestKnown subscription/openshift-cert-manager-operator -n cert-manager-operator --timeout=300s
 
 # Verify CSV
-oc get csv -n openshift-serverless
+oc get csv -n cert-manager-operator
 ```
-
 
 ---
 
-### 2.2 Install Red Hat OpenShift Service Mesh 2
+### 2.2 Install Red Hat Connectivity Link (RHCL)
+
+Red Hat Connectivity Link (RHCL) is **required** for RHOAI 3.0+ with Service Mesh 3 to provide AuthPolicy CRD support for LLMInferenceService networking and the MaaS platform.
+
+RHCL operator automatically installs the following Kuadrant components:
+- **Authorino Operator** - Provides AuthPolicy for authentication/authorization
+- **Limitador Operator** - Provides RateLimitPolicy for rate limiting
+- **DNS Operator** - Provides DNSPolicy for DNS management
 
 ```bash
-# Create required namespaces 
-oc create namespace openshift-operators-redhat --dry-run=client -o yaml | oc apply -f -
-
-# Install Service Mesh operator 2.6.11 
+# Install RHCL operator in openshift-operators namespace
 cat <<EOF | oc apply -f -
 apiVersion: operators.coreos.com/v1alpha1
 kind: Subscription
 metadata:
-  name: servicemeshoperator
+  name: rhcl-operator
   namespace: openshift-operators
 spec:
   channel: stable
-  name: servicemeshoperator
+  installPlanApproval: Automatic
+  name: rhcl-operator
   source: redhat-operators
   sourceNamespace: openshift-marketplace
-  installPlanApproval: Automatic
+  startingCSV: rhcl-operator.v1.2.0
 EOF
 
-# Wait for operator
-sleep 15
-oc wait --for=jsonpath='{.status.state}'=AtLatestKnown subscription/servicemeshoperator -n openshift-operators --timeout=300s
+# Wait for install plan to be created
+sleep 10
 
-# Verify
-oc get csv -n openshift-operators | grep servicemesh
+# Find and approve the authorino-operator install plan
+INSTALL_PLAN=$(oc get installplan -n openshift-operators -o json | jq -r '.items[] | select(.spec.clusterServiceVersionNames[] | contains("authorino-operator")) | select(.spec.approved == false) | .metadata.name' | head -1)
+
+if [ -n "$INSTALL_PLAN" ]; then
+  echo "Approving install plan: $INSTALL_PLAN"
+  oc patch installplan $INSTALL_PLAN -n openshift-operators --type merge -p '{"spec":{"approved":true}}'
+else
+  echo "No pending install plan found for authorino-operator"
+fi
+
+# Wait for operator to be ready
+sleep 15
+oc wait --for=jsonpath='{.status.state}'=AtLatestKnown subscription/rhcl-operator -n openshift-operators --timeout=300s
+```
+
+**Verify RHCL Installation:**
+
+```bash
+# Verify all installed operators (RHCL installs 4 operators total)
+echo "Installed operators:"
+oc get csv -n openshift-operators | grep -E 'rhcl|authorino|limitador|dns-operator'
+
+# Verify CRDs are available
+echo -e "\nAvailable Policy CRDs:"
+oc api-resources | grep -E 'AuthPolicy|DNSPolicy|RateLimitPolicy'
 ```
 
 ---
 
-### 2.3 Install Red Hat OpenShift AI 2.25
+### 2.3 Install Leader Worker Set Operator
 
 ```bash
-# Create namespace 
+# Create namespace
+oc create namespace openshift-lws-operator --dry-run=client -o yaml | oc apply -f -
+
+# Create OperatorGroup
+cat <<EOF | oc apply -f -
+apiVersion: operators.coreos.com/v1
+kind: OperatorGroup
+metadata:
+  name: openshift-lws-operator
+  namespace: openshift-lws-operator
+spec:
+  targetNamespaces:
+  - openshift-lws-operator
+EOF
+
+# Create Subscription
+cat <<EOF | oc apply -f -
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: leader-worker-set
+  namespace: openshift-lws-operator
+spec:
+  channel: stable-v1.0
+  installPlanApproval: Automatic
+  name: leader-worker-set
+  source: redhat-operators
+  sourceNamespace: openshift-marketplace
+EOF
+
+# Wait for operator to be ready
+sleep 15
+oc wait --for=jsonpath='{.status.state}'=AtLatestKnown subscription/leader-worker-set -n openshift-lws-operator --timeout=300s
+
+# Verify CSV
+oc get csv -n openshift-lws-operator
+```
+
+---
+
+### 2.4 Install Red Hat OpenShift AI 3
+
+```bash
+# Create namespace
 oc create namespace redhat-ods-operator --dry-run=client -o yaml | oc apply -f -
 
-# Create OperatorGroup 
+# Create OperatorGroup
 cat <<EOF | oc apply -f -
 apiVersion: operators.coreos.com/v1
 kind: OperatorGroup
@@ -460,7 +563,7 @@ metadata:
   name: rhods-operator
   namespace: redhat-ods-operator
 spec:
-  channel: stable
+  channel: fast-3.x
   name: rhods-operator
   source: redhat-operators
   sourceNamespace: openshift-marketplace
@@ -471,20 +574,30 @@ EOF
 sleep 20
 oc wait --for=jsonpath='{.status.state}'=AtLatestKnown subscription/rhods-operator -n redhat-ods-operator --timeout=300s
 
+sleep 180
+
 # Verify
 oc get csv -n redhat-ods-operator
+
+# RedHat Openshift AI 3 automatically installs service mesh operator3 but the install plan needs to be approved
+# If an install plan is stuck in Manual approval, approve it
+# Get the install plan name (if any)
+INSTALL_PLAN=$(oc get installplan -n openshift-operators -o json | jq -r '.items[] | select(.spec.clusterServiceVersionNames[] | contains("servicemeshoperator")) | select(.spec.approved == false) | .metadata.name' | head -1)
+
+if [ -n "$INSTALL_PLAN" ]; then
+  echo "Approving install plan: $INSTALL_PLAN"
+  oc patch installplan $INSTALL_PLAN -n openshift-operators --type merge -p '{"spec":{"approved":true}}'
+fi
+
+# Wait for operator
+sleep 15
+oc wait --for=jsonpath='{.status.state}'=AtLatestKnown subscription/servicemeshoperator3 -n openshift-operators --timeout=300s
 ```
 
 ---
 
 ## Phase 3: Create DataScienceCluster
 
-**IMPORTANT:** DataScienceCluster will automatically create:
-- KnativeServing in `knative-serving` namespace
-- ServiceMeshControlPlane in `istio-system` namespace
-- All KServe components
-
-**Do NOT manually create these resources.**
 
 ### 3.1 Wait for DSCInitialization
 
@@ -518,14 +631,6 @@ spec:
       managementState: Removed
     kserve:
       managementState: Managed
-      serving:
-        ingressGateway:
-          certificate:
-            type: SelfSigned # Replace it appropriate certificate
-        managementState: Managed
-        name: knative-serving
-      defaultDeploymentMode: Serverless
-      rawDeploymentServiceConfig: Headed
     kueue:
       managementState: Removed
     modelmeshserving:
@@ -540,31 +645,42 @@ spec:
       managementState: Removed
 EOF
 
-# Wait for DataScienceCluster to be ready (5-10 minutes)
-# This will automatically create KnativeServing and SMCP
 oc wait --for=condition=Ready datasciencecluster/default-dsc --timeout=900s
 ```
 
 ### 3.3 Verify All Components
 
 ```bash
-# Verify DataScienceCluster
-oc get datasciencecluster default-dsc
+# 1. Verify DataScienceCluster
+oc get datasciencecluster default-dsc -o jsonpath='{.status.phase}'
+# Expected: Ready
 
-# Verify KnativeServing (created automatically)
-oc get knativeserving -n knative-serving
+# 2. Verify KServe component is enabled
+oc get datasciencecluster default-dsc -o jsonpath='{.spec.components.kserve.managementState}'
+# Expected: Managed
 
-# Verify ServiceMeshControlPlane (created automatically)
-oc get servicemeshcontrolplane -n istio-system
+# 3. Verify Service Mesh 3 Istio resource
+oc get istio openshift-gateway -n openshift-ingress
+# Expected: STATUS=Healthy, VERSION=v1.26.2
 
-# Verify KServe controller
-oc get pods -n redhat-ods-applications | grep kserve
+# 4. Verify GatewayClass for KServe
+oc get gatewayclass data-science-gateway-class
+# Expected: ACCEPTED=True
 
-# Verify Istio pods
-oc get pods -n istio-system
+# 5. Verify Gateway (created automatically by RHOAI)
+oc get gateway -n openshift-ingress data-science-gateway
+# Expected: Should exist (PROGRAMMED)
 
-# Verify Knative pods
-oc get pods -n knative-serving
+# 6. Verify KServe controller
+oc get pods -n redhat-ods-applications | grep kserve-controller
+# Expected: kserve-controller-manager running
+
+# 7. Verify Service Mesh operator (version 3)
+oc get csv -n redhat-ods-operator | grep servicemeshoperator3
+# Expected: servicemeshoperator3.v3.x.x Succeeded
+
+# 8. Verify KServe API resources
+oc api-resources | grep kserve.io
 ```
 
 ---
@@ -635,7 +751,5 @@ curl -k https://${ROUTE_URL}/v1/chat/completions \
     "max_tokens": 50
   }'
 ```
-
-
 
 ---

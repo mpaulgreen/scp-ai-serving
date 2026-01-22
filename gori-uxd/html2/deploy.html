@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Deploy Model - ModelCar Platform</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="header">
+    <a href="index.html" class="logo">ModelCar Platform</a>
+  </header>
+
+  <nav class="nav">
+    <ul class="nav-tabs">
+      <li><a href="index.html" class="nav-tab">Dashboard</a></li>
+      <li><a href="catalog.html" class="nav-tab">Catalog</a></li>
+      <li><a href="deploy.html" class="nav-tab active">Deploy</a></li>
+      <li><a href="test.html" class="nav-tab">Test</a></li>
+    </ul>
+  </nav>
+
+  <main class="main">
+    <h1>Deploy Model</h1>
+
+    <div class="card" style="max-width: 600px;">
+      <form onsubmit="deployModel(event)">
+        <div class="form-group">
+          <label class="form-label">Model</label>
+          <select class="form-select" required>
+            <option value="">Select a model...</option>
+            <option value="granite-3.1-8b-instruct">Granite 3.1 8B Instruct</option>
+            <option value="qwen-2.5-3b-instruct">Qwen 2.5 3B Instruct</option>
+            <option value="llama-3.1-8b">Llama 3.1 8B</option>
+            <option value="mistral-7b-instruct">Mistral 7B Instruct</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Deployment Name</label>
+          <input type="text" class="form-input" placeholder="my-model-prod" required pattern="[a-z0-9-]+">
+          <small class="text-muted">Lowercase letters, numbers, and hyphens only</small>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Number of Replicas</label>
+          <input type="number" class="form-input" min="1" max="10" value="1" required>
+          <small class="text-muted">Number of pods to run (1-10)</small>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Namespace</label>
+          <input type="text" class="form-input" value="llm" readonly>
+        </div>
+
+        <div style="display: flex; gap: var(--spacing-sm); margin-top: var(--spacing-lg);">
+          <button type="submit" class="btn btn-primary">Deploy</button>
+          <a href="index.html" class="btn">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </main>
+
+  <script>
+    function deployModel(e) {
+      e.preventDefault();
+      alert('Deployment created successfully!');
+      window.location.href = 'index.html';
+    }
+  </script>
+</body>
+</html>

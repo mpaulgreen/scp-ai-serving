@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Model Catalog - ModelCar Platform</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .model-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: var(--spacing-lg);
+    }
+    .model-card {
+      background: var(--color-white);
+      border: 1px solid var(--color-gray-200);
+      border-radius: 8px;
+      padding: var(--spacing-lg);
+    }
+    .model-name {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: var(--spacing-sm);
+    }
+    .model-meta {
+      color: var(--color-gray-600);
+      font-size: 13px;
+      margin-bottom: var(--spacing-md);
+    }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <a href="index.html" class="logo">ModelCar Platform</a>
+  </header>
+
+  <nav class="nav">
+    <ul class="nav-tabs">
+      <li><a href="index.html" class="nav-tab">Dashboard</a></li>
+      <li><a href="catalog.html" class="nav-tab active">Catalog</a></li>
+      <li><a href="deploy.html" class="nav-tab">Deploy</a></li>
+      <li><a href="test.html" class="nav-tab">Test</a></li>
+    </ul>
+  </nav>
+
+  <main class="main">
+    <h1>Available Models</h1>
+
+    <div class="model-grid">
+      <!-- Model 1 -->
+      <div class="model-card">
+        <div class="model-name">Granite 3.1 8B Instruct</div>
+        <div class="model-meta">
+          Family: granite<br>
+          Parameters: 8B<br>
+          GPU Memory: 16Gi min<br>
+          License: Apache 2.0
+        </div>
+        <a href="deploy.html?model=granite-3.1-8b-instruct" class="btn btn-primary">Deploy</a>
+      </div>
+
+      <!-- Model 2 -->
+      <div class="model-card">
+        <div class="model-name">Qwen 2.5 3B Instruct</div>
+        <div class="model-meta">
+          Family: qwen<br>
+          Parameters: 3B<br>
+          GPU Memory: 8Gi min<br>
+          License: Apache 2.0
+        </div>
+        <a href="deploy.html?model=qwen-2.5-3b-instruct" class="btn btn-primary">Deploy</a>
+      </div>
+
+      <!-- Model 3 -->
+      <div class="model-card">
+        <div class="model-name">Llama 3.1 8B</div>
+        <div class="model-meta">
+          Family: llama<br>
+          Parameters: 8B<br>
+          GPU Memory: 16Gi min<br>
+          License: Llama 3.1
+        </div>
+        <a href="deploy.html?model=llama-3.1-8b" class="btn btn-primary">Deploy</a>
+      </div>
+
+      <!-- Model 4 -->
+      <div class="model-card">
+        <div class="model-name">Mistral 7B Instruct</div>
+        <div class="model-meta">
+          Family: mistral<br>
+          Parameters: 7B<br>
+          GPU Memory: 14Gi min<br>
+          License: Apache 2.0
+        </div>
+        <a href="deploy.html?model=mistral-7b-instruct" class="btn btn-primary">Deploy</a>
+      </div>
+    </div>
+  </main>
+</body>
+</html>

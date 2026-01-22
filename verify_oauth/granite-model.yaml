@@ -1,0 +1,176 @@
+# Granite 3.1 8B Instruct Model Deployment using LLMInferenceService
+#
+# Prerequisites:
+# - ModelCar image built and pushed to Quay (see ../modelcar/large_model.md)
+# - Quay pull secret created in llm namespace
+# - GPU nodes available with NVIDIA GPU Operator
+#
+# Environment variables:
+# export QUAY_USER="your-org-name"              # Quay organization (e.g., mpaulgreen)
+# export QUAY_ROBOT_USER="org+robotname"        # Robot account for auth (e.g., mpaulgreen+mpaulrobo)
+# export QUAY_PASSWORD="robot-account-token"    # Robot account token
+#
+# Apply with:
+# cat granite-model.yaml | envsubst | oc apply -f -
+
+---
+# Namespace for LLM models
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: llm
+  labels:
+    name: llm
+    opendatahub.io/dashboard: "true"
+
+---
+# Quay Pull Secret for ModelCar Image
+# Uses robot account credentials for authentication
+apiVersion: v1
+kind: Secret
+metadata:
+  name: quay-pull-secret
+  namespace: llm
+type: kubernetes.io/dockerconfigjson
+stringData:
+  .dockerconfigjson: |
+    {
+      "auths": {
+        "quay.io": {
+          "username": "${QUAY_ROBOT_USER}",
+          "password": "${QUAY_PASSWORD}"
+        }
+      }
+    }
+
+---
+# LLMInferenceService for Granite 3.1 8B Instruct with FP8 Quantization
+apiVersion: serving.kserve.io/v1alpha1
+kind: LLMInferenceService
+metadata:
+  name: granite-3-1-8b-instruct-fp8
+  namespace: llm
+  annotations:
+    alpha.maas.opendatahub.io/tiers: '[]'
+  labels:
+    app.kubernetes.io/name: granite-3-1-8b-instruct-fp8
+    app.kubernetes.io/component: model
+    app.kubernetes.io/part-of: model-as-a-service
+spec:
+  model:
+    # Model name for API requests
+    name: granite-3.1-8b-instruct-fp8
+
+    # OCI URI pointing to ModelCar in Quay
+    # Uses QUAY_USER (organization name, e.g., mpaulgreen)
+    uri: oci://quay.io/${QUAY_USER}/granite-3.1-8b-instruct-fp8:gori-1.0
+
+  # Single replica to start
+  replicas: 1
+
+  # Router configuration - integrate with MaaS Gateway
+  router:
+    gateway:
+      refs:
+        - name: maas-default-gateway
+          namespace: openshift-ingress
+    route: {}
+
+  # vLLM container template
+  template:
+    # Schedule on GPU nodes
+    nodeSelector:
+      nvidia.com/gpu.present: "true"
+
+    # Tolerate GPU taints
+    tolerations:
+      - effect: NoSchedule
+        key: nvidia.com/gpu
+        operator: Exists
+
+    # Image pull secrets for private Quay registry
+    imagePullSecrets:
+      - name: quay-pull-secret
+
+    containers:
+      - name: main
+        # Red Hat ModelCar-compatible vLLM Runtime
+        image: "docker.io/vllm/vllm-openai:v0.6.6.post1"
+        imagePullPolicy: IfNotPresent
+
+        # vLLM server command
+        command:
+          - python3
+          - -m
+          - vllm.entrypoints.openai.api_server
+        args:
+          - --port=8000
+          - --model=/mnt/models
+          - --served-model-name=granite-3.1-8b-instruct-fp8
+          - --quantization=fp8
+          - --tensor-parallel-size=1
+          - --gpu-memory-utilization=0.85
+          - --dtype=auto
+          - --max-model-len=4096
+          - --max-num-seqs=128
+          - --enable-chunked-prefill
+          - --enable-prefix-caching
+          - --disable-log-requests
+          - --trust-remote-code
+          - --ssl-certfile=/var/run/kserve/tls/tls.crt
+          - --ssl-keyfile=/var/run/kserve/tls/tls.key
+
+        env:
+          # HuggingFace cache location
+          - name: HF_HOME
+            value: /tmp/hf_home
+
+          # Disable telemetry
+          - name: VLLM_NO_USAGE_STATS
+            value: "1"
+
+          # Offline mode (model in container)
+          - name: HF_HUB_OFFLINE
+            value: "1"
+
+          # GPU configuration
+          - name: CUDA_VISIBLE_DEVICES
+            value: "0"
+
+          - name: NVIDIA_VISIBLE_DEVICES
+            value: "all"
+
+          - name: NVIDIA_DRIVER_CAPABILITIES
+            value: "compute,utility"
+
+        # Resource allocation (8B model with FP8 quantization)
+        resources:
+          requests:
+            cpu: "8"
+            memory: 32Gi
+            nvidia.com/gpu: "1"
+          limits:
+            cpu: "16"
+            memory: 64Gi
+            nvidia.com/gpu: "1"
+
+        # Health checks (HTTPS on port 8000)
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+            scheme: HTTPS
+          initialDelaySeconds: 180
+          periodSeconds: 30
+          timeoutSeconds: 30
+          failureThreshold: 5
+
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+            scheme: HTTPS
+          initialDelaySeconds: 180
+          periodSeconds: 10
+          timeoutSeconds: 10
+          failureThreshold: 30
