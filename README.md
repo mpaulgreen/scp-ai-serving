@@ -90,3 +90,26 @@ Single-tenant MaaS platform deployment with OAuth 2.0 / OpenID Connect authentic
 - External SaaS identity provider integration
 - Tier-based user access control
 - Production-ready OAuth authentication flow
+
+---
+
+### vLLM Monitoring Stack
+Centralized monitoring and observability for vLLM-based LLM inference workloads across all namespaces using OpenShift user-workload monitoring.
+
+📖 **Guide:** [model_metrices/README.md](./model_metrices/README.md)
+
+**Features:**
+- Performance monitoring (TTFT, TPOT, E2E latency, throughput)
+- Grafana dashboards with namespace filtering
+- PrometheusRule alerts (latency, throughput, capacity)
+
+**Components:**
+- PodMonitor for automatic vLLM pod discovery
+- Prometheus (OpenShift user-workload monitoring)
+- Grafana with performance dashboards
+- PrometheusRule with 9 alert conditions
+
+**Use Case:**
+- Production monitoring for LLM inference workloads
+- Performance analysis and capacity planning
+- Token usage tracking and cost estimation
