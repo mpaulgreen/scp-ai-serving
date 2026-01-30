@@ -1,0 +1,241 @@
+# Not Tested
+---
+# PrometheusRule for vLLM LLM Inference Alerts
+#
+# This PrometheusRule defines alerting rules for vLLM-based LLM inference workloads.
+# Alerts cover performance, reliability, and resource utilization.
+#
+# Prerequisites:
+#   - OpenShift user-workload monitoring enabled
+#   - ServiceMonitor deployed and scraping vLLM metrics
+#
+# Usage:
+#   oc apply -f prometheus-alerts.yaml
+#
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: vllm-alerts
+  namespace: llm
+  labels:
+    prometheus: user-workload
+    role: alert-rules
+spec:
+  groups:
+    # ========================================
+    # Performance Alerts
+    # ========================================
+    - name: vllm-performance
+      interval: 30s
+      rules:
+        # High P95 end-to-end latency
+        - alert: VLLMHighLatency
+          expr: |
+            histogram_quantile(0.95,
+              rate(kserve_vllm:e2e_request_latency_seconds_bucket[5m])
+            ) > 10
+          for: 5m
+          labels:
+            severity: warning
+            component: vllm
+            alert_type: performance
+          annotations:
+            summary: "vLLM high request latency (P95 > 10s)"
+            description: |
+              The P95 end-to-end request latency for {{ $labels.model_name }} is {{ $value | humanizeDuration }}.
+              This indicates slow inference performance.
+
+              Troubleshooting:
+              - Check GPU utilization
+              - Review batch size (--max-num-seqs)
+              - Consider scaling replicas
+              - Check for resource contention
+
+        # High time to first token (TTFT)
+        - alert: VLLMHighTimeToFirstToken
+          expr: |
+            histogram_quantile(0.95,
+              rate(kserve_vllm:time_to_first_token_seconds_bucket[5m])
+            ) > 5
+          for: 5m
+          labels:
+            severity: warning
+            component: vllm
+            alert_type: performance
+          annotations:
+            summary: "vLLM high time to first token (P95 > 5s)"
+            description: |
+              The P95 time to first token for {{ $labels.model_name }} is {{ $value | humanizeDuration }}.
+              This indicates slow prompt processing.
+
+              Possible causes:
+              - Large prompt sizes
+              - GPU overload
+              - Inefficient KV cache usage
+
+        # Low token generation throughput
+        - alert: VLLMLowTokenThroughput
+          expr: |
+            kserve_vllm:avg_generation_throughput_toks_per_s < 50
+          for: 10m
+          labels:
+            severity: warning
+            component: vllm
+            alert_type: performance
+          annotations:
+            summary: "vLLM low token generation throughput (< 50 tokens/s)"
+            description: |
+              Token generation throughput for {{ $labels.model_name }} is {{ $value | printf "%.2f" }} tokens/s.
+              Expected throughput is >50 tokens/s for A10G GPU.
+
+              Optimization tips:
+              - Enable FP8 quantization (--quantization=fp8)
+              - Increase GPU memory utilization (--gpu-memory-utilization)
+              - Enable prefix caching (--enable-prefix-caching)
+
+    # ========================================
+    # Reliability Alerts
+    # ========================================
+    - name: vllm-reliability
+      interval: 30s
+      rules:
+        # No requests received
+        - alert: VLLMNoRequests
+          expr: |
+            rate(kserve_vllm:request_success_total[10m]) == 0
+          for: 10m
+          labels:
+            severity: warning
+            component: vllm
+            alert_type: reliability
+          annotations:
+            summary: "vLLM receiving no requests for 10 minutes"
+            description: |
+              Model {{ $labels.model_name }} has not received any requests for 10 minutes.
+
+              Possible causes:
+              - Gateway routing issues
+              - Authentication failures
+              - Client-side errors
+
+              Check:
+              oc get httproute -n llm
+              oc get authpolicy -n openshift-ingress
+
+    # ========================================
+    # Resource Utilization Alerts
+    # ========================================
+    - name: vllm-resources
+      interval: 30s
+      rules:
+        # High queue depth
+        - alert: VLLMHighQueueDepth
+          expr: |
+            kserve_vllm:num_requests_waiting > 50
+          for: 5m
+          labels:
+            severity: warning
+            component: vllm
+            alert_type: capacity
+          annotations:
+            summary: "vLLM high queue depth (> 50 waiting requests)"
+            description: |
+              Model {{ $labels.model_name }} has {{ $value }} requests waiting in queue.
+              This indicates capacity issues.
+
+              Solutions:
+              - Scale replicas: kubectl scale --replicas=3 llminferenceservice/{{ $labels.model_name }}
+              - Increase batch size: --max-num-seqs
+              - Add more GPUs: --tensor-parallel-size
+
+        # GPU KV cache nearly full
+        - alert: VLLMGPUCacheFull
+          expr: |
+            kserve_vllm:gpu_cache_usage_perc > 95
+          for: 5m
+          labels:
+            severity: warning
+            component: vllm
+            alert_type: capacity
+          annotations:
+            summary: "vLLM GPU KV cache usage high (> 95%)"
+            description: |
+              GPU KV cache usage for {{ $labels.model_name }} is {{ $value | printf "%.2f" }}%.
+              High cache usage can cause request preemptions and performance degradation.
+
+              Solutions:
+              - Reduce max_model_len: --max-model-len
+              - Increase GPU memory utilization: --gpu-memory-utilization
+              - Enable prefix caching: --enable-prefix-caching
+
+        # Frequent request preemptions
+        - alert: VLLMFrequentPreemptions
+          expr: |
+            rate(kserve_vllm:num_preemptions_total[5m]) * 60 > 10
+          for: 5m
+          labels:
+            severity: warning
+            component: vllm
+            alert_type: capacity
+          annotations:
+            summary: "vLLM frequent request preemptions (> 10/min)"
+            description: |
+              Model {{ $labels.model_name }} is preempting {{ $value | printf "%.2f" }} requests/min.
+              Preemptions occur when KV cache is full and requests must be swapped out.
+
+              This degrades performance and increases latency.
+
+              Solutions:
+              - Reduce concurrent requests: --max-num-seqs
+              - Increase GPU memory: scale to larger GPU
+              - Reduce max sequence length: --max-model-len
+
+
+    # ========================================
+    # Business/Usage Alerts
+    # ========================================
+    - name: vllm-business
+      interval: 60s
+      rules:
+        # Unusual spike in request volume
+        - alert: VLLMRequestSpike
+          expr: |
+            (
+              rate(kserve_vllm:request_success_total[5m]) >
+              avg_over_time(rate(kserve_vllm:request_success_total[5m])[15m:5m]) * 3
+            )
+          for: 10m
+          labels:
+            severity: info
+            component: vllm
+            alert_type: usage
+          annotations:
+            summary: "vLLM request volume spike detected"
+            description: |
+              Request rate for {{ $labels.model_name }} is {{ $value | printf "%.2f" }} req/s,
+              which is 3x higher than the 15-minute average.
+
+              This may indicate:
+              - Legitimate traffic spike
+              - Potential abuse or DoS
+              - Rate limiting bypass
+
+              Check rate limit policies:
+              oc get ratelimitpolicy -n openshift-ingress
+
+        # Excessive token consumption
+        - alert: VLLMExcessiveTokenUsage
+          expr: |
+            rate(kserve_vllm:generation_tokens_total[1h]) > 1000000
+          for: 30m
+          labels:
+            severity: info
+            component: vllm
+            alert_type: usage
+          annotations:
+            summary: "vLLM excessive token generation rate"
+            description: |
+              Model {{ $labels.model_name }} is generating {{ $value | printf "%.0f" }} tokens/hour.
+              This may indicate high usage or abuse.
+
+              Review top users and tier allocations.

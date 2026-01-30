@@ -1,0 +1,67 @@
+---
+# PodMonitor for vLLM Metrics Scraping (Cross-Namespace)
+#
+# This PodMonitor configures Prometheus to discover and scrape vLLM metrics
+# from LLM inference pods across ALL namespaces.
+#
+# Deployed in: custom-monitoring namespace
+# Discovers: LLM pods in any namespace with matching labels
+#
+# Prerequisites:
+#   - OpenShift user-workload monitoring enabled
+#   - custom-monitoring namespace created
+#
+# Usage:
+#   oc apply -f podmonitor-vllm.yaml
+#
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: vllm-metrics
+  namespace: custom-monitoring
+  labels:
+    app: vllm-monitoring
+    monitoring: llm-inference
+spec:
+  # Select pods that match these labels across all namespaces
+  selector:
+    matchLabels:
+      app.kubernetes.io/part-of: llminferenceservice
+
+  # Pod metrics endpoints
+  podMetricsEndpoints:
+    - port: https-default  # Port name from pod spec
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 25s
+      scheme: https
+
+      # TLS configuration
+      tlsConfig:
+        insecureSkipVerify: true
+
+      # Relabel configurations to add useful labels
+      relabelings:
+        # Add namespace label
+        - sourceLabels: [__meta_kubernetes_namespace]
+          targetLabel: namespace
+          action: replace
+
+        # Add pod name label
+        - sourceLabels: [__meta_kubernetes_pod_name]
+          targetLabel: pod
+          action: replace
+
+        # Add model name from pod label
+        - sourceLabels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+          targetLabel: model_name
+          action: replace
+
+        # Add node name
+        - sourceLabels: [__meta_kubernetes_pod_node_name]
+          targetLabel: node
+          action: replace
+
+  # Discover pods across ALL namespaces
+  namespaceSelector:
+    any: true
